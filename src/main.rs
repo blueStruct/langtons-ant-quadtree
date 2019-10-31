@@ -3,6 +3,7 @@ use self::Dir::*;
 use self::Quad::*;
 
 use std::cell::RefCell;
+use std::ops::{Index, IndexMut};
 use std::rc::{Rc, Weak};
 
 fn main() {
@@ -12,35 +13,31 @@ fn main() {
     }
 }
 
+type Link = Option<Rc<RefCell<Node>>>;
+type WeakLink = Option<Weak<RefCell<Node>>>;
+
+struct Ant {
+    root: Rc<RefCell<Node>>,
+    node: Rc<RefCell<Node>>,
+    dir: Dir,
+}
+
+struct Node {
+    level: u32,
+    tile: Option<Color>,
+    quad: Option<Quad>,
+    parent: WeakLink,
+    children: Children,
+}
+
+struct Children(Vec<Link>);
+
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 enum Dir {
     N,
     E,
     S,
     W,
-}
-
-impl Dir {
-    fn rev(&self) -> Self {
-        match self {
-            N => S,
-            S => N,
-            E => W,
-            W => E,
-        }
-    }
-}
-
-impl From<i8> for Dir {
-    fn from(a: i8) -> Self {
-        match a % 4 {
-            0 => N,
-            1 => E,
-            2 => S,
-            3 => W,
-            _ => N,
-        }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
@@ -51,59 +48,10 @@ enum Quad {
     SE,
 }
 
-impl From<u8> for Quad {
-    fn from(a: u8) -> Self {
-        match a {
-            0 => NW,
-            1 => NE,
-            2 => SW,
-            3 => SE,
-            _ => panic!("can't convert number bigger 4 to Quad"),
-        }
-    }
-}
-
-impl Into<usize> for Quad {
-    fn into(self) -> usize {
-        match self {
-            NW => 0,
-            NE => 1,
-            SW => 2,
-            SE => 3,
-        }
-    }
-}
-
 #[derive(Copy, Clone, PartialEq)]
 enum Color {
     Black,
     White,
-}
-
-impl Color {
-    fn flip(&mut self) {
-        match self {
-            Black => *self = White,
-            White => *self = Black,
-        }
-    }
-}
-
-type Link = Option<Rc<RefCell<Node>>>;
-type WeakLink = Option<Weak<RefCell<Node>>>;
-
-struct Node {
-    level: u32,
-    tile: Option<Color>,
-    quad: Option<Quad>,
-    parent: WeakLink,
-    children: Vec<Link>,
-}
-
-struct Ant {
-    root: Rc<RefCell<Node>>,
-    node: Rc<RefCell<Node>>,
-    dir: Dir,
 }
 
 impl Ant {
@@ -113,7 +61,7 @@ impl Ant {
             tile: Some(White),
             quad: None,
             parent: None,
-            children: vec![None; 4],
+            children: Children(vec![None; 4]),
         }));
 
         let node = root.clone();
@@ -168,7 +116,7 @@ impl Ant {
             tile: None,
             quad: None,
             parent: None,
-            children: vec![None; 4],
+            children: Children(vec![None; 4]),
         }));
 
         // linking the parent and the node
@@ -179,7 +127,7 @@ impl Ant {
         }
         {
             let node = self.node.clone();
-            parent.borrow_mut().children[expand_as as usize] = Some(node);
+            parent.borrow_mut().children[expand_as] = Some(node);
         }
 
         // set created parent node as Quadtree root
@@ -188,7 +136,7 @@ impl Ant {
 
     fn create_child(&mut self, quad: Quad) {
         // if child already exists, cancel
-        if { self.node.borrow().children[quad as usize].is_some() } {
+        if { self.node.borrow().children[quad].is_some() } {
             return;
         }
 
@@ -199,13 +147,13 @@ impl Ant {
             tile: if level == 0 { Some(White) } else { None },
             quad: Some(quad),
             parent: Some(Rc::downgrade(&self.node)),
-            children: vec![None; 4],
+            children: Children(vec![None; 4]),
         }));
 
         // linking the parent and the node
         {
             let mut node = self.node.borrow_mut();
-            node.children[quad as usize] = Some(child);
+            node.children[quad] = Some(child);
         }
     }
 
@@ -218,7 +166,7 @@ impl Ant {
     }
 
     fn level_down(node: &mut Rc<RefCell<Node>>, quad: Quad) {
-        let child = node.borrow().children[quad as usize].clone();
+        let child = node.borrow().children[quad].clone();
         match child {
             None => {}
             Some(i) => *node = i,
@@ -259,7 +207,7 @@ impl Ant {
         Ant::level_up(&mut self.node);
 
         // after going up, go down, mirrored to crossed boundary
-        dir = dir.rev();
+        dir.turn_around();
         quad_stack = quad_stack
             .iter()
             .map(|&x| Ant::try_move(Some(x), dir).unwrap())
@@ -278,8 +226,8 @@ impl Ant {
             let node = self.node.borrow();
             if let Some(x) = node.tile {
                 match x {
-                    White => self.dir = Dir::from(self.dir as i8 + 1),
-                    Black => self.dir = Dir::from(self.dir as i8 - 1),
+                    White => self.dir.turn_cw(),
+                    Black => self.dir.turn_ccw(),
                 }
             }
         }
@@ -307,8 +255,69 @@ impl Ant {
     }
 }
 
+// TODO: ?
 impl Drop for Ant {
-    fn drop(&mut self) {
-        // TODO?
+    fn drop(&mut self) {}
+}
+
+impl Index<Quad> for Children {
+    type Output = Link;
+
+    fn index(&self, quad: Quad) -> &Self::Output {
+        match quad {
+            NW => &self.0[0],
+            NE => &self.0[1],
+            SW => &self.0[2],
+            SE => &self.0[3],
+        }
+    }
+}
+
+impl IndexMut<Quad> for Children {
+    fn index_mut(&mut self, quad: Quad) -> &mut Self::Output {
+        match quad {
+            NW => &mut self.0[0],
+            NE => &mut self.0[1],
+            SW => &mut self.0[2],
+            SE => &mut self.0[3],
+        }
+    }
+}
+
+impl Dir {
+    fn turn_cw(&mut self) {
+        *self = match self {
+            N => E,
+            E => S,
+            S => W,
+            W => N,
+        }
+    }
+
+    fn turn_ccw(&mut self) {
+        *self = match self {
+            N => W,
+            W => S,
+            S => E,
+            E => N,
+        }
+    }
+
+    fn turn_around(&mut self) {
+        *self = match self {
+            N => S,
+            S => N,
+            E => W,
+            W => E,
+        }
+    }
+}
+
+impl Color {
+    fn flip(&mut self) {
+        *self = match self {
+            Black => White,
+            White => Black,
+        }
     }
 }
