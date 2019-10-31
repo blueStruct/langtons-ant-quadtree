@@ -61,7 +61,7 @@ impl Ant {
             tile: Some(White),
             quad: None,
             parent: None,
-            children: Children(vec![None; 4]),
+            children: Children::new(),
         }));
 
         let node = root.clone();
@@ -116,7 +116,7 @@ impl Ant {
             tile: None,
             quad: None,
             parent: None,
-            children: Children(vec![None; 4]),
+            children: Children::new(),
         }));
 
         // linking the parent and the node
@@ -147,7 +147,7 @@ impl Ant {
             tile: if level == 0 { Some(White) } else { None },
             quad: Some(quad),
             parent: Some(Rc::downgrade(&self.node)),
-            children: Children(vec![None; 4]),
+            children: Children::new(),
         }));
 
         // linking the parent and the node
@@ -258,6 +258,12 @@ impl Ant {
 // TODO: ?
 impl Drop for Ant {
     fn drop(&mut self) {}
+}
+
+impl Children {
+    fn new() -> Self {
+        Self(vec![None; 4])
+    }
 }
 
 impl Index<Quad> for Children {
