@@ -9,19 +9,21 @@ use std::rc::{Rc, Weak};
 fn main() {
     let mut ant = Ant::new();
     for _ in 1..10 {
-        ant.go()
+        ant.go();
     }
 }
 
 type Link = Option<Rc<RefCell<Node>>>;
 type WeakLink = Option<Weak<RefCell<Node>>>;
 
+#[derive(Debug)]
 struct Ant {
     root: Rc<RefCell<Node>>,
     node: Rc<RefCell<Node>>,
     dir: Dir,
 }
 
+#[derive(Debug)]
 struct Node {
     level: u32,
     tile: Option<Color>,
@@ -30,9 +32,10 @@ struct Node {
     children: Children,
 }
 
+#[derive(Debug)]
 struct Children(Vec<Link>);
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
 enum Dir {
     N,
     E,
@@ -40,7 +43,7 @@ enum Dir {
     W,
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
 enum Quad {
     NW,
     NE,
@@ -48,7 +51,7 @@ enum Quad {
     SE,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Color {
     Black,
     White,
@@ -185,6 +188,7 @@ impl Ant {
         let mut can_move = Ant::try_move(quad, dir).is_some();
 
         // as long ant hits boundary, go up a level
+        // TODO fix endless loop
         while !can_move {
             // if no parent, expand tree into bigger quad
             self.create_parent();
@@ -255,7 +259,7 @@ impl Ant {
     }
 }
 
-// TODO: ?
+// TODO
 impl Drop for Ant {
     fn drop(&mut self) {}
 }
@@ -325,5 +329,18 @@ impl Color {
             Black => White,
             White => Black,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_parent_and_level_up() {
+        let mut ant = Ant::new();
+        ant.create_parent();
+        Ant::level_up(&mut ant.node);
+        assert_eq!(ant.node.borrow().level, 1);
     }
 }
